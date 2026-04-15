@@ -454,6 +454,14 @@ There is nothing to look up and nothing to match back.
 
 The overall goal would be to roundtrip 99% of all hackage packages.
 
+#### Current roundtrip status
+
+There is no roundtrip failure data yet because the barbies prototype does not roundtrip.
+Modifying the field grammar to thread annotations through both parsing and printing
+is the hardest part of the implementation — the `FieldGrammar` type class has many methods
+and each needs dual `HasNoAnn`/`HasAnn` instances.
+A first simple roundtrip test based on the barbies approach is expected soon.
+
 ### Exact printing
 The `pretty` library doesn't have a newline primitive, and I find it hard to position elements exactly.
 
