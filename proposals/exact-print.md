@@ -369,6 +369,87 @@ On printing, `applyTriviaDoc` replays the original text around each element.
 This means leading-comma style, trailing-comma style, and mixed styles
 are all preserved through a roundtrip.
 
+#### Monoidal field merging
+
+A question raised by @Bodigrim in [#11227](https://github.com/haskell/cabal/issues/11227#issuecomment-2863513015):
+how do we distinguish two separate `build-depends` fields from one combined field?
+
+```cabal
+build-depends: base
+build-depends: containers
+```
+vs.
+```cabal
+build-depends: base, containers
+```
+
+In the current GPD these are identical because monoidal fields are merged during parsing.
+The barbies approach solves this with the `PreserveGrouping` type family.
+When `m ~ HasNoAnn`, `PreserveGrouping HasNoAnn a` reduces to `a` (the merged list, as before).
+When `m ~ HasAnn`, `PreserveGrouping HasAnn a` reduces to `[a]` — a list of per-occurrence groups.
+
+So `targetBuildDepends` in `BuildInfoWith HasAnn` has type
+`[(Positions, [(Position, Ann SurroundingText DependencyAnn)])]`.
+Each outer list element corresponds to one `build-depends:` line in the source file,
+and each inner list contains the dependencies on that line with their trivia.
+This means we can always reconstruct how many `build-depends` fields there were
+and which dependencies belonged to which.
+
+#### Spaces inside version bounds
+
+Another question from @Bodigrim: how are spaces within version bounds preserved?
+For example, `base<5` vs `base    < 5` vs `base>=4   &&<  5`.
+
+The barbies approach parameterises recursively: `DependencyWith m` contains `VersionRangeWith m`,
+and `VersionRangeWith m` stores `SurroundingText` at each node of the version range expression.
+The `SurroundingText` (a pair of leading/trailing strings) captures the exact whitespace
+that appeared around operators and operands.
+When printing, `applyTriviaDoc` replays these strings around the pretty-printed node,
+reproducing the original spacing.
+
+For programmatically inserted values (where there is no source text),
+the `IsInserted` trivia constructor causes the printer to fall back to default formatting.
+
+#### Relationship to other lossless parsing approaches
+
+Several approaches to lossless parsing were discussed in [#11227](https://github.com/haskell/cabal/issues/11227):
+
++ **ruamel.yaml** (raised by @mpickering): the parser records extra info about whitespace and comments;
+  the user edits the result; unchanged nodes are printed as before; changed nodes are printed fresh.
+  The barbies approach follows this exact pattern.
+  `HasTrivia` / `ExactRepresentation` preserves original formatting for unchanged nodes;
+  `IsInserted` triggers fresh pretty-printing for new values.
+
++ **Rowan / Swift lib/Syntax** (raised by @ulysses4ever): these build a full Concrete Syntax Tree (CST)
+  where every token (including trivia) is a node.
+  Our approach is different: we annotate the existing abstract types rather than building a separate CST.
+  This is pragmatic — cabal files are simpler than Haskell or Rust source,
+  and we already have a working parser that produces GPD.
+  Building a full CST would require a second parser or a major rewrite.
+
++ **GHC Exact Print Annotations** (raised by @Bodigrim): GHC attaches trivia to AST nodes via extension fields.
+  Our approach is similar in spirit but simpler: GHC's syntax is much larger
+  and uses open type families (Trees That Grow) which cause exhaustiveness issues.
+  Our closed type family with two constructors avoids this.
+
++ **cabal-fields / Field-level manipulation** (raised by @mpickering referencing cabal-add):
+  working at the `Field` level avoids touching GPD but loses type safety.
+  See the "Why GPD rather than Field" section under Alternatives Considered.
+
+#### Eliminating the namespace / side-table
+
+The earlier namespace approach (discussed extensively in [#11227](https://github.com/haskell/cabal/issues/11227))
+stored trivia in a side-table keyed by a `Namespace` path (e.g. `library.build-depends`).
+@Bodigrim raised a fundamental problem: how do you key into this map unambiguously,
+especially for monoidal fields and nested conditionals?
+
+The barbies approach eliminates this problem entirely.
+There is no side-table and no namespace keys.
+Trivia lives directly inside each value via `Ann` wrappers.
+Each `DependencyAnn` carries its own `SurroundingText`;
+each field occurrence carries its own `Positions`.
+There is nothing to look up and nothing to match back.
+
 The overall goal would be to roundtrip 99% of all hackage packages.
 
 ### Exact printing
