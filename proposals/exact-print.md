@@ -267,20 +267,36 @@ type GenericPackageDescription    = GenericPackageDescriptionWith HasNoAnn
 type GenericPackageDescriptionAnn = GenericPackageDescriptionWith HasAnn
 
 data GenericPackageDescriptionWith (m :: HasAnnotation) = GenericPackageDescription
-  { packageDescription :: PackageDescriptionWith m
-  , gpdScannedVersion  :: AnnotateWith Positions m (Maybe Version)
+  { packageDescription :: PackageDescription
+  , gpdScannedVersion  :: Maybe Version
   , genPackageFlags    :: [PackageFlag]
   , condLibrary        :: Maybe (CondTree ConfVar (LibraryWith m))
-  , condSubLibraries   :: [(UnqualComponentName, CondTree ConfVar (LibraryWith m))]
-  , condForeignLibs    :: [(UnqualComponentName, CondTree ConfVar (ForeignLibWith m))]
-  , condExecutables    :: [(UnqualComponentName, CondTree ConfVar (ExecutableWith m))]
-  , condTestSuites     :: [(UnqualComponentName, CondTree ConfVar (TestSuiteWith m))]
-  , condBenchmarks     :: [(UnqualComponentName, CondTree ConfVar (BenchmarkWith m))]
+  , ...
   }
 ```
 
-Note: the current prototype on the `gpd-barbie` branch only parameterises `condLibrary` so far;
-the other component fields will be extended to use `With m` variants as the implementation progresses.
+The `m` parameter doesn't appear at the GPD level itself —
+it propagates through the component types.
+`LibraryWith m` contains `BuildInfoWith m`, and that is where the annotations live:
+
+```haskell
+data LibraryWith (m :: HasAnnotation) = Library
+  { libName        :: LibraryName
+  , exposedModules :: [ModuleName]
+  , libBuildInfo   :: BuildInfoWith m
+  , ...
+  }
+
+data BuildInfoWith (m :: HasAnnotation) = BuildInfo
+  { buildable          :: AnnotateWith Positions m Bool
+  , targetBuildDepends :: PreserveGrouping m (...)
+  , ...
+  }
+```
+
+When `m ~ HasNoAnn`, `AnnotateWith Positions HasNoAnn Bool` reduces to `Bool`
+and `LibraryWith HasNoAnn` is just `Library` — nothing changes for existing code.
+When `m ~ HasAnn`, fields gain `Ann` wrappers carrying positions and whitespace.
 
 The parameterisation recurses through component types.
 For example `LibraryWith m` contains `BuildInfoWith m`,
