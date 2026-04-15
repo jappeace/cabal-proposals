@@ -112,7 +112,9 @@ main = do
         let
           depends = mkDependency dependName anyVersion (NES.singleton LMainLibName)
           modified = generic { condLibrary = fmap addDep (condLibrary generic) }
-          addDep lib = lib { condTreeConstraints = depends : condTreeConstraints lib }
+          addDep tree = tree { condTreeData = addDepToLib (condTreeData tree) }
+          addDepToLib lib = lib { libBuildInfo = addDepToBI (libBuildInfo lib) }
+          addDepToBI bi = bi { targetBuildDepends = depends : targetBuildDepends bi }
         in
         Text.writeFile "my.cabal" $ exactPrint modified
 ```
@@ -600,27 +602,30 @@ as only code that touches GPD internals directly is affected.
 
 #### Testing compatibility
 
-To get an idea of how much breakage these changes introduce we propose:
+To get an idea of how much breakage these changes introduce we tested
+the two packages identified as most likely to be affected:
 
-1. **Sampling of direct dependencies.**
-   We can use a `cabal.project` file to tell a specific project
-   to build with our custom version of cabal.
-   We will test this on known GPD-touching packages such as `gi-gtk` and `gtk2hs`
-   (whose custom `Setup.hs` files manipulate GPD internals, as identified by @geekosaur).
-   Because we only parameterised a few fields in GPD we expect
-   either no build errors,
-   or build errors that require calling a single extra function to solve.
+1. **haskell-gi** (`Data.GI.CodeGen.CabalHooks`):
+   This is the most relevant test case — it directly accesses `GenericPackageDescription`
+   fields in its `confHook`: it reads `condLibrary`, extracts `condTreeData`,
+   updates `exposedModules`, `libBuildInfo`, and `autogenModules`, then writes back
+   `condLibrary` via record update.
+   **Result: compiles unchanged against the `gpd-barbie` branch.**
+   All field types reduce to their original types under `HasNoAnn`:
+   `condLibrary :: Maybe (CondTree ConfVar (LibraryWith HasNoAnn))` = `Maybe (CondTree ConfVar Library)`.
 
-2. **Broader ecosystem testing.**
-   We can test a larger part of the ecosystem by using a `head.hackage`-style
-   approach and patching lower-level dependencies for our changed cabal version.
-   Testing against `clc-stackage` would give a broad picture of affected packages.
+2. **gtk2hs** (`Gtk2HsSetup`):
+   Despite being identified as a potential concern, gtk2hs only uses the resolved
+   `PackageDescription` (via `Distribution.PackageDescription`), not `GenericPackageDescription`.
+   It never touches `condLibrary` or any GPD-specific fields.
+   **Result: compiles unchanged** — `PackageDescription` is not parameterised at all.
 
-3. **Roundtrip testing.**
-   We already test exact-print roundtripping against hackage packages.
-   Currently most packages fail because the annotated printer only handles
-   the most basic cabal file structures;
-   as more field types gain annotation support, the pass rate will increase toward the 99% target.
+These results confirm that the barbies parameterisation is backwards compatible
+for code that works with the `GenericPackageDescription` type alias (i.e. `HasNoAnn`).
+The only breaking change is the common stanza merging (which is a separate, deliberate change).
+
+For broader ecosystem testing, a `head.hackage`-style approach
+or testing against `clc-stackage` could be done before merging.
 
 ## Interested parties
 
