@@ -457,9 +457,12 @@ The overall goal would be to roundtrip 99% of all hackage packages.
 #### Current roundtrip status
 
 There is no roundtrip failure data yet because the barbies prototype does not roundtrip.
-Modifying the field grammar to thread annotations through both parsing and printing
-is the hardest part of the implementation — the `FieldGrammar` type class has many methods
-and each needs dual `HasNoAnn`/`HasAnn` instances.
+This is different from the earlier ZuriHac prototype which completely bypassed `FieldGrammar`
+and could roundtrip basic files.
+The barbies approach is much better integrated with the rest of cabal —
+it threads annotations through `FieldGrammar` itself via dual `HasNoAnn`/`HasAnn` instances —
+but this also makes modifying the field grammar the hardest part of the implementation,
+since the type class has many methods and each needs both instances.
 A first simple roundtrip test based on the barbies approach is expected soon.
 
 ### Exact printing
