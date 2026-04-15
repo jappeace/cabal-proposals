@@ -219,19 +219,13 @@ data HasAnnotation = HasAnn | HasNoAnn
 type family AnnotateWith (trivia :: Type) (m :: HasAnnotation) (a :: Type) where
   AnnotateWith t HasNoAnn a = a          -- plain: just the value
   AnnotateWith t HasAnn  a = Ann t a     -- annotated: value wrapped with trivia
-
-type family AttachWith (t :: Type) (m :: HasAnnotation) (a :: Type) where
-  AttachWith t HasAnn  a = (t, a)        -- attach position tuple
-  AttachWith _ HasNoAnn a = a            -- no position
-
-type family PreserveGrouping (m :: HasAnnotation) (a :: Type) where
-  PreserveGrouping HasAnn  a = [a]       -- keep per-field-occurrence grouping
-  PreserveGrouping HasNoAnn a = a        -- flatten
 ```
 
-When `m ~ HasNoAnn`, every type family reduces to the bare value,
+When `m ~ HasNoAnn`, the type family reduces to the bare value,
 so `GenericPackageDescriptionWith HasNoAnn` is identical to the old `GenericPackageDescription`.
 When `m ~ HasAnn`, values gain trivia wrappers.
+There are additional type families for attaching positions and preserving field grouping,
+but the core idea is this single conditional wrapper.
 
 We use a closed type family with two equations rather than a type class or open type family.
 Because the kind `HasAnnotation` has exactly two constructors,
@@ -273,17 +267,20 @@ type GenericPackageDescription    = GenericPackageDescriptionWith HasNoAnn
 type GenericPackageDescriptionAnn = GenericPackageDescriptionWith HasAnn
 
 data GenericPackageDescriptionWith (m :: HasAnnotation) = GenericPackageDescription
-  { packageDescription :: PackageDescription
-  , gpdScannedVersion  :: Maybe Version
+  { packageDescription :: PackageDescriptionWith m
+  , gpdScannedVersion  :: AnnotateWith Positions m (Maybe Version)
   , genPackageFlags    :: [PackageFlag]
   , condLibrary        :: Maybe (CondTree ConfVar (LibraryWith m))
-  , condSubLibraries   :: [(UnqualComponentName, CondTree ConfVar Library)]
-  , condForeignLibs    :: [(UnqualComponentName, CondTree ConfVar ForeignLib)]
-  , condExecutables    :: [(UnqualComponentName, CondTree ConfVar Executable)]
-  , condTestSuites     :: [(UnqualComponentName, CondTree ConfVar TestSuite)]
-  , condBenchmarks     :: [(UnqualComponentName, CondTree ConfVar Benchmark)]
+  , condSubLibraries   :: [(UnqualComponentName, CondTree ConfVar (LibraryWith m))]
+  , condForeignLibs    :: [(UnqualComponentName, CondTree ConfVar (ForeignLibWith m))]
+  , condExecutables    :: [(UnqualComponentName, CondTree ConfVar (ExecutableWith m))]
+  , condTestSuites     :: [(UnqualComponentName, CondTree ConfVar (TestSuiteWith m))]
+  , condBenchmarks     :: [(UnqualComponentName, CondTree ConfVar (BenchmarkWith m))]
   }
 ```
+
+Note: the current prototype on the `gpd-barbie` branch only parameterises `condLibrary` so far;
+the other component fields will be extended to use `With m` variants as the implementation progresses.
 
 The parameterisation recurses through component types.
 For example `LibraryWith m` contains `BuildInfoWith m`,
