@@ -267,17 +267,17 @@ type GenericPackageDescription    = GenericPackageDescriptionWith HasNoAnn
 type GenericPackageDescriptionAnn = GenericPackageDescriptionWith HasAnn
 
 data GenericPackageDescriptionWith (m :: HasAnnotation) = GenericPackageDescription
-  { packageDescription :: PackageDescription
-  , gpdScannedVersion  :: Maybe Version
-  , genPackageFlags    :: [PackageFlag]
+  { packageDescription :: PackageDescriptionWith m
+  , gpdScannedVersion  :: AnnotateWith Positions m (Maybe Version)
+  , genPackageFlags    :: [PackageFlagWith m]
   , condLibrary        :: Maybe (CondTree ConfVar (LibraryWith m))
   , ...
   }
 ```
 
-The `m` parameter doesn't appear at the GPD level itself —
-it propagates through the component types.
-`LibraryWith m` contains `BuildInfoWith m`, and that is where the annotations live:
+The `m` parameter appears at every level, recursively parameterising the entire tree.
+`PackageDescriptionWith m`, `PackageFlagWith m`, `LibraryWith m` all follow the same pattern.
+`LibraryWith m` contains `BuildInfoWith m`, and that is where most of the field-level annotations live:
 
 ```haskell
 data LibraryWith (m :: HasAnnotation) = Library
